@@ -1,6 +1,6 @@
 # slock-daemon-ts-rewrite
 
-A well-structured TypeScript rewrite of `@slock-ai/daemon` (npm package `0.4.1`) based on published runtime behavior.
+A well-structured TypeScript rewrite of `@slock-ai/daemon` (npm package `0.6.0`) based on published runtime behavior.
 
 ## Goals
 

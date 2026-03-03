@@ -42,6 +42,13 @@ function parseArgs(argv: string[]): CliArgs {
   return { agentId, serverUrl, authToken };
 }
 
+function toLocalTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function buildHeaders(authToken: string): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -144,6 +151,7 @@ async function main(): Promise<void> {
             sender_type: string;
             sender_name: string;
             content: string;
+            timestamp?: string;
           }>;
         };
 
@@ -160,7 +168,8 @@ async function main(): Promise<void> {
                 ? `DM:@${m.channel_name}`
                 : `#${m.channel_name}`;
             const senderPrefix = m.sender_type === "agent" ? "(agent) " : "";
-            return `[${channel}] ${senderPrefix}@${m.sender_name}: ${m.content}`;
+            const time = m.timestamp ? ` (${toLocalTime(m.timestamp)})` : "";
+            return `[${channel}]${time} ${senderPrefix}@${m.sender_name}: ${m.content}`;
           })
           .join("\n");
 
@@ -271,6 +280,7 @@ async function main(): Promise<void> {
             senderType: string;
             senderName: string;
             content: string;
+            createdAt?: string;
           }>;
           historyLimited?: boolean;
           historyLimitMessage?: string;
@@ -295,7 +305,8 @@ async function main(): Promise<void> {
         const formatted = data.messages
           .map((m) => {
             const senderPrefix = m.senderType === "agent" ? "(agent) " : "";
-            return `[seq:${m.seq}] ${senderPrefix}@${m.senderName}: ${m.content}`;
+            const time = m.createdAt ? ` (${toLocalTime(m.createdAt)})` : "";
+            return `[seq:${m.seq}]${time} ${senderPrefix}@${m.senderName}: ${m.content}`;
           })
           .join("\n");
 

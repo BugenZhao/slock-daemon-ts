@@ -18,6 +18,7 @@ export interface AgentMessage {
   sender_type: "agent" | "human" | string;
   sender_name: string;
   content: string;
+  timestamp?: string;
 }
 
 export interface WorkspaceFileNode {
@@ -69,7 +70,7 @@ export type IncomingMessage =
   | { type: "agent:sleep"; agentId: string }
   | { type: "agent:reset-workspace"; agentId: string }
   | { type: "agent:deliver"; agentId: string; message: AgentMessage; seq: number }
-  | { type: "agent:workspace:list"; agentId: string }
+  | { type: "agent:workspace:list"; agentId: string; dirPath?: string }
   | { type: "agent:workspace:read"; agentId: string; path: string; requestId: string }
   | { type: "machine:workspace:scan" }
   | { type: "machine:workspace:delete"; directoryName: string }
@@ -83,7 +84,7 @@ export type OutgoingMessage =
   | { type: "agent:trajectory"; agentId: string; entries: TrajectoryEntry[] }
   | { type: "agent:session"; agentId: string; sessionId: string }
   | { type: "agent:deliver:ack"; agentId: string; seq: number }
-  | { type: "agent:workspace:file_tree"; agentId: string; files: WorkspaceFileNode[] }
+  | { type: "agent:workspace:file_tree"; agentId: string; files: WorkspaceFileNode[]; dirPath?: string }
   | { type: "agent:workspace:file_content"; agentId: string; requestId: string; content: string | null; binary: boolean }
   | { type: "machine:workspace:scan_result"; directories: WorkspaceDirectorySummary[] }
   | { type: "machine:workspace:delete_result"; directoryName: string; success: boolean };

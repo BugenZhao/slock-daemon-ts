@@ -26,6 +26,13 @@ import type {
 const DATA_DIR = path.join(os.homedir(), ".slock", "agents");
 const MAX_TRAJECTORY_TEXT = 2_000;
 
+function toLocalTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 interface PendingReceive {
   resolve: (messages: AgentMessage[]) => void;
   timer: NodeJS.Timeout;
@@ -48,6 +55,7 @@ interface AgentProcess {
  */
 export class AgentProcessManager {
   private readonly agents = new Map<string, AgentProcess>();
+  private readonly agentsStarting = new Set<string>();
 
   constructor(
     private readonly chatBridgePath: string,
@@ -61,21 +69,23 @@ export class AgentProcessManager {
     wakeMessage?: AgentMessage,
     unreadSummary?: Record<string, number>,
   ): Promise<void> {
-    if (this.agents.has(agentId)) {
+    if (this.agents.has(agentId) || this.agentsStarting.has(agentId)) {
       return;
     }
+    this.agentsStarting.add(agentId);
 
-    const driver = getDriver(config.runtime || "claude");
-    const agentDataDir = path.join(DATA_DIR, agentId);
-
-    await mkdir(agentDataDir, { recursive: true });
-
-    const memoryMdPath = path.join(agentDataDir, "MEMORY.md");
     try {
-      await access(memoryMdPath);
-    } catch {
-      const agentName = config.displayName || config.name;
-      const initialMemory = `# ${agentName}
+      const driver = getDriver(config.runtime || "claude");
+      const agentDataDir = path.join(DATA_DIR, agentId);
+
+      await mkdir(agentDataDir, { recursive: true });
+
+      const memoryMdPath = path.join(agentDataDir, "MEMORY.md");
+      try {
+        await access(memoryMdPath);
+      } catch {
+        const agentName = config.displayName || config.name;
+        const initialMemory = `# ${agentName}
 
 ## Role
 ${config.description || "No role defined yet."}
@@ -86,51 +96,56 @@ ${config.description || "No role defined yet."}
 ## Active Context
 - First startup.
 `;
-      await writeFile(memoryMdPath, initialMemory);
+        await writeFile(memoryMdPath, initialMemory);
+      }
+
+      await mkdir(path.join(agentDataDir, "notes"), { recursive: true });
+
+      const prompt = this.buildStartupPrompt(
+        driver,
+        config,
+        agentId,
+        wakeMessage,
+        unreadSummary,
+      );
+
+      const { process } = driver.spawn({
+        agentId,
+        config,
+        prompt,
+        workingDirectory: agentDataDir,
+        chatBridgePath: this.chatBridgePath,
+        daemonApiKey: this.daemonApiKey,
+      });
+
+      const agentProcess: AgentProcess = {
+        process,
+        driver,
+        inbox: [],
+        pendingReceive: null,
+        config,
+        sessionId: config.sessionId || null,
+        isInReceiveMessage: false,
+        notificationTimer: null,
+        pendingNotificationCount: 0,
+      };
+
+      this.agents.set(agentId, agentProcess);
+      this.agentsStarting.delete(agentId);
+
+      this.bindProcessStreams(agentId, process, driver);
+
+      this.sendToServer({ type: "agent:status", agentId, status: "active" });
+      this.sendToServer({
+        type: "agent:activity",
+        agentId,
+        activity: "working",
+        detail: "Starting...",
+      });
+    } catch (error) {
+      this.agentsStarting.delete(agentId);
+      throw error;
     }
-
-    await mkdir(path.join(agentDataDir, "notes"), { recursive: true });
-
-    const prompt = this.buildStartupPrompt(
-      driver,
-      config,
-      agentId,
-      wakeMessage,
-      unreadSummary,
-    );
-
-    const { process } = driver.spawn({
-      agentId,
-      config,
-      prompt,
-      workingDirectory: agentDataDir,
-      chatBridgePath: this.chatBridgePath,
-      daemonApiKey: this.daemonApiKey,
-    });
-
-    const agentProcess: AgentProcess = {
-      process,
-      driver,
-      inbox: [],
-      pendingReceive: null,
-      config,
-      sessionId: config.sessionId || null,
-      isInReceiveMessage: false,
-      notificationTimer: null,
-      pendingNotificationCount: 0,
-    };
-
-    this.agents.set(agentId, agentProcess);
-
-    this.bindProcessStreams(agentId, process, driver);
-
-    this.sendToServer({ type: "agent:status", agentId, status: "active" });
-    this.sendToServer({
-      type: "agent:activity",
-      agentId,
-      activity: "working",
-      detail: "Starting...",
-    });
   }
 
   async stopAgent(agentId: string): Promise<void> {
@@ -304,7 +319,7 @@ ${config.description || "No role defined yet."}
     }
   }
 
-  async getFileTree(agentId: string): Promise<WorkspaceFileNode[]> {
+  async getFileTree(agentId: string, dirPath?: string): Promise<WorkspaceFileNode[]> {
     const agentDir = path.join(DATA_DIR, agentId);
 
     try {
@@ -313,8 +328,16 @@ ${config.description || "No role defined yet."}
       return [];
     }
 
-    const count = { n: 0 };
-    return this.buildFileTree(agentDir, agentDir, count);
+    let targetDir = agentDir;
+    if (dirPath) {
+      const resolved = path.resolve(agentDir, dirPath);
+      if (!resolved.startsWith(`${agentDir}${path.sep}`) && resolved !== agentDir) {
+        return [];
+      }
+      targetDir = resolved;
+    }
+
+    return this.listDirectoryChildren(targetDir, agentDir);
   }
 
   async readFile(
@@ -398,28 +421,41 @@ ${config.description || "No role defined yet."}
     process.on("exit", (code) => {
       console.log(`[Agent ${agentId}] Process exited with code ${code}`);
 
-      if (!this.agents.has(agentId)) {
+      const ap = this.agents.get(agentId);
+      if (!ap) {
         return;
       }
+      if (ap.process !== process) return;
 
-      const ap = this.agents.get(agentId);
-      if (ap?.pendingReceive) {
+      if (ap.pendingReceive) {
         clearTimeout(ap.pendingReceive.timer);
         ap.pendingReceive.resolve([]);
       }
 
-      if (ap?.notificationTimer) {
+      if (ap.notificationTimer) {
         clearTimeout(ap.notificationTimer);
       }
 
       this.agents.delete(agentId);
-      this.sendToServer({ type: "agent:status", agentId, status: "sleeping" });
-      this.sendToServer({
-        type: "agent:activity",
-        agentId,
-        activity: "sleeping",
-        detail: "",
-      });
+      if (code === 0) {
+        this.sendToServer({ type: "agent:status", agentId, status: "sleeping" });
+        this.sendToServer({
+          type: "agent:activity",
+          agentId,
+          activity: "sleeping",
+          detail: "",
+        });
+      } else {
+        const reason = code === null ? "killed by signal" : `exit code ${code}`;
+        console.error(`[Agent ${agentId}] Process crashed (${reason}) - marking inactive`);
+        this.sendToServer({ type: "agent:status", agentId, status: "inactive" });
+        this.sendToServer({
+          type: "agent:activity",
+          agentId,
+          activity: "offline",
+          detail: `Crashed (${reason})`,
+        });
+      }
     });
   }
 
@@ -442,8 +478,9 @@ ${config.description || "No role defined yet."}
           ? `DM:@${wakeMessage.channel_name}`
           : `#${wakeMessage.channel_name}`;
       const senderPrefix = wakeMessage.sender_type === "agent" ? "(agent) " : "";
+      const time = wakeMessage.timestamp ? ` (${toLocalTime(wakeMessage.timestamp)})` : "";
 
-      const formatted = `[${channelLabel}] ${senderPrefix}@${wakeMessage.sender_name}: ${wakeMessage.content}`;
+      const formatted = `[${channelLabel}]${time} ${senderPrefix}@${wakeMessage.sender_name}: ${wakeMessage.content}`;
       let prompt = `New message received:\n\n${formatted}`;
 
       if (unreadSummary && Object.keys(unreadSummary).length > 0) {
@@ -635,10 +672,9 @@ ${config.description || "No role defined yet."}
     }
   }
 
-  private async buildFileTree(
+  private async listDirectoryChildren(
     dir: string,
     rootDir: string,
-    count: { n: number },
   ): Promise<WorkspaceFileNode[]> {
     let entries;
 
@@ -657,7 +693,6 @@ ${config.description || "No role defined yet."}
     const nodes: WorkspaceFileNode[] = [];
 
     for (const entry of entries) {
-      if (count.n >= 500) break;
       if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
       const fullPath = path.join(dir, entry.name);
@@ -670,17 +705,13 @@ ${config.description || "No role defined yet."}
         continue;
       }
 
-      count.n += 1;
-
       if (entry.isDirectory()) {
-        const children = await this.buildFileTree(fullPath, rootDir, count);
         nodes.push({
           name: entry.name,
           path: relativePath,
           isDirectory: true,
           size: 0,
           modifiedAt: info.mtime.toISOString(),
-          children,
         });
       } else {
         nodes.push({

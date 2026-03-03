@@ -79,12 +79,24 @@ async function main(): Promise<void> {
           console.log(
             `[Daemon] Starting agent ${msg.agentId} (model: ${msg.config.model}, session: ${msg.config.sessionId || "new"}${msg.wakeMessage ? ", with wake message" : ""})`,
           );
-          void agentManager.startAgent(
-            msg.agentId,
-            msg.config,
-            msg.wakeMessage,
-            msg.unreadSummary,
-          );
+          void agentManager
+            .startAgent(
+              msg.agentId,
+              msg.config,
+              msg.wakeMessage,
+              msg.unreadSummary,
+            )
+            .catch((error) => {
+              const reason = error instanceof Error ? error.message : String(error);
+              console.error(`[Daemon] Failed to start agent ${msg.agentId}:`, reason);
+              connection.send({ type: "agent:status", agentId: msg.agentId, status: "inactive" });
+              connection.send({
+                type: "agent:activity",
+                agentId: msg.agentId,
+                activity: "offline",
+                detail: `Start failed: ${reason}`,
+              });
+            });
           break;
 
         case "agent:stop":
@@ -111,11 +123,12 @@ async function main(): Promise<void> {
           break;
 
         case "agent:workspace:list":
-          void agentManager.getFileTree(msg.agentId).then((files) => {
+          void agentManager.getFileTree(msg.agentId, msg.dirPath).then((files) => {
             connection.send({
               type: "agent:workspace:file_tree",
               agentId: msg.agentId,
               files,
+              dirPath: msg.dirPath,
             });
           });
           break;
