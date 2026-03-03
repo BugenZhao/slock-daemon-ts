@@ -1,0 +1,33 @@
+{
+  "name": "slock-daemon-ts-rewrite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Well-structured TypeScript rewrite of @slock-ai/daemon",
+  "bin": {
+    "slock-daemon": "dist/index.js",
+    "slock-chat-bridge": "dist/chat-bridge.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:chat-bridge": "tsx src/chat-bridge.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "ws": "^8.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
