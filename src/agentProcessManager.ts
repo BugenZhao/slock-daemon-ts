@@ -61,6 +61,7 @@ export class AgentProcessManager {
     private readonly chatBridgePath: string,
     private readonly sendToServer: (msg: OutgoingMessage) => void,
     private readonly daemonApiKey: string,
+    private readonly verboseJsonIo = false,
   ) {}
 
   async startAgent(
@@ -116,6 +117,9 @@ ${config.description || "No role defined yet."}
         workingDirectory: agentDataDir,
         chatBridgePath: this.chatBridgePath,
         daemonApiKey: this.daemonApiKey,
+        onAgentJsonIo: (stream, raw) => {
+          this.logAgentJsonIo(agentId, stream, raw);
+        },
       });
 
       const agentProcess: AgentProcess = {
@@ -403,6 +407,7 @@ ${config.description || "No role defined yet."}
 
       for (const line of lines) {
         if (!line.trim()) continue;
+        this.logAgentJsonIo(agentId, "stdout", line);
 
         const events = driver.parseLine(line);
         for (const event of events) {
@@ -414,6 +419,10 @@ ${config.description || "No role defined yet."}
     process.stderr.on("data", (chunk) => {
       const text = chunk.toString().trim();
       if (!text) return;
+      for (const line of text.split("\n")) {
+        if (!line.trim()) continue;
+        this.logAgentJsonIo(agentId, "stderr", line);
+      }
       if (/Reconnecting\.\.\.|Falling back from WebSockets/i.test(text)) return;
       console.error(`[Agent ${agentId} stderr]: ${text}`);
     });
@@ -668,7 +677,23 @@ ${config.description || "No role defined yet."}
 
     const encoded = ap.driver.encodeStdinMessage(notification, ap.sessionId);
     if (encoded) {
+      this.logAgentJsonIo(agentId, "stdin", encoded);
       ap.process.stdin.write(`${encoded}\n`);
+    }
+  }
+
+  private logAgentJsonIo(
+    agentId: string,
+    stream: "stdin" | "stdout" | "stderr",
+    raw: string,
+  ): void {
+    if (!this.verboseJsonIo) return;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      const tag = stream.toUpperCase();
+      console.log(`[Agent ${agentId} ${tag} JSON] ${JSON.stringify(parsed)}`);
+    } catch {
+      // Only log valid JSON payloads in verbose mode.
     }
   }
 

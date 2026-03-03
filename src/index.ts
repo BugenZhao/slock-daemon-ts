@@ -13,12 +13,16 @@ import type { IncomingMessage } from "./types.js";
 interface CliOptions {
   serverUrl: string;
   apiKey: string;
+  enableSleepWake: boolean;
+  verbose: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
   const args = argv.slice(2);
   let serverUrl = "";
   let apiKey = "";
+  let enableSleepWake = true;
+  let verbose = false;
 
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--server-url" && args[i + 1]) {
@@ -30,14 +34,31 @@ function parseArgs(argv: string[]): CliOptions {
     if (args[i] === "--api-key" && args[i + 1]) {
       apiKey = args[i + 1];
       i += 1;
+      continue;
+    }
+
+    if (args[i] === "--disable-sleep-wake") {
+      enableSleepWake = false;
+      continue;
+    }
+
+    if (args[i] === "--enable-sleep-wake") {
+      enableSleepWake = true;
+      continue;
+    }
+
+    if (args[i] === "--verbose") {
+      verbose = true;
     }
   }
 
   if (!serverUrl || !apiKey) {
-    throw new Error("Usage: slock-daemon --server-url <url> --api-key <key>");
+    throw new Error(
+      "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose]",
+    );
   }
 
-  return { serverUrl, apiKey };
+  return { serverUrl, apiKey, enableSleepWake, verbose };
 }
 
 function resolveChatBridgePath(): string {
@@ -54,7 +75,7 @@ function resolveChatBridgePath(): string {
 }
 
 async function main(): Promise<void> {
-  const { serverUrl, apiKey } = parseArgs(process.argv);
+  const { serverUrl, apiKey, enableSleepWake, verbose } = parseArgs(process.argv);
   const chatBridgePath = resolveChatBridgePath();
 
   let connection!: DaemonConnection;
@@ -63,6 +84,7 @@ async function main(): Promise<void> {
     chatBridgePath,
     (msg) => connection.send(msg),
     apiKey,
+    verbose,
   );
 
   connection = new DaemonConnection({
@@ -75,16 +97,22 @@ async function main(): Promise<void> {
       );
 
       switch (msg.type) {
-        case "agent:start":
+        case "agent:start": {
+          const effectiveConfig = msg.config;
+          const effectiveWakeMessage = enableSleepWake ? msg.wakeMessage : undefined;
+          const effectiveUnreadSummary = enableSleepWake
+            ? msg.unreadSummary
+            : undefined;
+
           console.log(
-            `[Daemon] Starting agent ${msg.agentId} (model: ${msg.config.model}, session: ${msg.config.sessionId || "new"}${msg.wakeMessage ? ", with wake message" : ""})`,
+            `[Daemon] Starting agent ${msg.agentId} (model: ${effectiveConfig.model}, session: ${effectiveConfig.sessionId || "new"}${effectiveWakeMessage ? ", with wake message" : ""})`,
           );
           void agentManager
             .startAgent(
               msg.agentId,
-              msg.config,
-              msg.wakeMessage,
-              msg.unreadSummary,
+              effectiveConfig,
+              effectiveWakeMessage,
+              effectiveUnreadSummary,
             )
             .catch((error) => {
               const reason = error instanceof Error ? error.message : String(error);
@@ -98,6 +126,7 @@ async function main(): Promise<void> {
               });
             });
           break;
+        }
 
         case "agent:stop":
           console.log(`[Daemon] Stopping agent ${msg.agentId}`);
@@ -105,6 +134,12 @@ async function main(): Promise<void> {
           break;
 
         case "agent:sleep":
+          if (!enableSleepWake) {
+            console.log(
+              `[Daemon] Ignoring sleep request for ${msg.agentId} (--disable-sleep-wake)`,
+            );
+            break;
+          }
           console.log(`[Daemon] Sleeping agent ${msg.agentId}`);
           agentManager.sleepAgent(msg.agentId);
           break;
@@ -205,6 +240,12 @@ async function main(): Promise<void> {
   });
 
   console.log("[Slock Daemon] Starting...");
+  console.log(
+    `[Slock Daemon] Sleep/Wake mode: ${enableSleepWake ? "enabled" : "disabled"}`,
+  );
+  if (verbose) {
+    console.log("[Slock Daemon] Verbose agent JSON I/O logging: enabled");
+  }
   connection.connect();
 
   const shutdown = async () => {

@@ -1,12 +1,20 @@
-# slock-daemon-ts-rewrite
+# slock-daemon-ts
 
-A well-structured TypeScript rewrite of `@slock-ai/daemon` (npm package `0.6.0`) based on published runtime behavior.
+An alternative implementation of `@slock-ai/daemon` (currently aligned to npm package `0.6.0`).
+This project is not a strict 1:1 rewrite: it keeps upstream-compatible behavior while adding local improvements.
 
 ## Goals
 
-- Keep daemon behavior compatible with the published npm package.
+- Keep daemon behavior aligned with published upstream npm releases via periodic bump/sync.
+- Add pragmatic enhancements on top of upstream behavior.
 - Split logic into clear modules with explicit types.
 - Make local development and execution easy via `npm run` scripts.
+
+## Enhancements Over Upstream
+
+- `--disable-sleep-wake`: disable sleep/wake orchestration while still preserving `sessionId` resume behavior.
+- `--verbose`: print full agent JSON I/O (`stdin` / `stdout` / `stderr`) for low-level debugging.
+- TypeScript-first modular codebase for easier extension, testing, and periodic upstream sync.
 
 ## Project Structure
 
@@ -34,6 +42,21 @@ Development mode:
 ```bash
 npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY
 ```
+
+Enable verbose agent JSON I/O logs (for debugging):
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --verbose
+```
+
+Disable agent sleep/wake behavior:
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --disable-sleep-wake
+```
+
+With `--disable-sleep-wake`, daemon ignores `agent:sleep` and wake-message context,
+but still keeps/resumes `sessionId` when provided by upstream.
 
 Build:
 

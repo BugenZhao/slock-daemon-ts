@@ -78,6 +78,7 @@ export class ClaudeDriver implements RuntimeDriver {
       ...(ctx.config.sessionId ? { session_id: ctx.config.sessionId } : {}),
     });
 
+    ctx.onAgentJsonIo?.("stdin", stdinMessage);
     proc.stdin.write(`${stdinMessage}\n`);
 
     return { process: proc };
