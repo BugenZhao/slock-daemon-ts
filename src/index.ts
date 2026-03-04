@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { accessSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,9 @@ import { AgentProcessManager } from "./agentProcessManager.js";
 import { DaemonConnection } from "./connection.js";
 import { detectRuntimes } from "./runtime-detection.js";
 import type { IncomingMessage } from "./types.js";
+
+const require = createRequire(import.meta.url);
+const DAEMON_VERSION = (require("../package.json") as { version?: string }).version || "unknown";
 
 interface CliOptions {
   serverUrl: string;
@@ -232,6 +236,7 @@ async function main(): Promise<void> {
         runningAgents: agentManager.getRunningAgentIds(),
         hostname: os.hostname(),
         os: `${os.platform()} ${os.arch()}`,
+        daemonVersion: DAEMON_VERSION,
       });
     },
     onDisconnect: () => {

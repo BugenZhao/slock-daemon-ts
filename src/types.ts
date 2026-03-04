@@ -77,7 +77,15 @@ export type IncomingMessage =
   | { type: "ping" };
 
 export type OutgoingMessage =
-  | { type: "ready"; capabilities: string[]; runtimes: RuntimeId[]; runningAgents: string[]; hostname: string; os: string }
+  | {
+      type: "ready";
+      capabilities: string[];
+      runtimes: RuntimeId[];
+      runningAgents: string[];
+      hostname: string;
+      os: string;
+      daemonVersion: string;
+    }
   | { type: "pong" }
   | { type: "agent:status"; agentId: string; status: "active" | "sleeping" | "inactive" }
   | { type: "agent:activity"; agentId: string; activity: AgentActivity; detail: string }

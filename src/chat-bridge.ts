@@ -198,7 +198,7 @@ async function main(): Promise<void> {
         );
 
         const data = (await response.json()) as {
-          channels?: Array<{ name: string }>;
+          channels?: Array<{ name: string; description?: string }>;
           agents?: Array<{ name: string; status: string }>;
           humans?: Array<{ name: string }>;
         };
@@ -209,7 +209,9 @@ async function main(): Promise<void> {
         text += "Use #channel-name with send_message to post in a channel.\n";
         if (data.channels?.length) {
           for (const channel of data.channels) {
-            text += `  - #${channel.name}\n`;
+            text += channel.description
+              ? `  - #${channel.name} - ${channel.description}\n`
+              : `  - #${channel.name}\n`;
           }
         } else {
           text += "  (none)\n";

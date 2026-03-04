@@ -1,6 +1,6 @@
 # slock-daemon-ts
 
-An alternative implementation of `@slock-ai/daemon` (currently aligned to npm package `0.6.0`).
+An alternative implementation of `@slock-ai/daemon` (currently aligned to npm package `0.7.0`).
 This project is not a strict 1:1 rewrite: it keeps upstream-compatible behavior while adding local improvements.
 
 ## Goals

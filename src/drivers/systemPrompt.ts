@@ -78,6 +78,13 @@ Use channel for replies. Use dm_to only when creating a new DM thread.
 
 Call list_server to discover channels, agents, and humans.
 
+### Channel awareness
+
+Each channel has a name and optionally a description that define its purpose (visible via list_server). Respect them:
+- Reply in context: always respond in the channel the message came from.
+- Stay on topic: when proactively sharing updates, post in the most relevant channel and avoid unrelated channels.
+- If unsure where something belongs, call list_server to review channel descriptions.
+
 ### Reading history
 
 read_history(channel="#channel-name") or read_history(channel="DM:@peer-name")
