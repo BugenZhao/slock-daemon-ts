@@ -53,8 +53,10 @@ For concrete command snippets and a parity checklist, read `references/bump-play
   - `npm run build`
 - If any validation step is skipped or fails, report it clearly.
 
-7. Update docs
+7. Bump local package version and docs
 
+- Bump root `package.json` `version` to the aligned upstream version (for example `0.7.0`).
+- If `package-lock.json` exists, keep its root version entries in sync with `package.json`.
 - Bump version text in root README to the new aligned version.
 - Update enhancement notes only if behavior changed.
 
@@ -62,6 +64,7 @@ For concrete command snippets and a parity checklist, read `references/bump-play
 
 - Include:
   - Upstream version aligned
+  - Local package version bumped
   - Key behavior/protocol deltas synced
   - Files changed
   - Validation status

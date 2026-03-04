@@ -19,6 +19,11 @@ git diff --no-index --stat ../npm-upstream/v0.6.0/package/dist/chat-bridge.js ..
 
 git diff --no-index ../npm-upstream/v0.6.0/package/dist/index.js ../npm-upstream/v0.7.0/package/dist/index.js
 git diff --no-index ../npm-upstream/v0.6.0/package/dist/chat-bridge.js ../npm-upstream/v0.7.0/package/dist/chat-bridge.js
+
+# 4) bump local package version to aligned upstream version
+npm pkg set version=0.7.0
+# If package-lock.json exists, sync lockfile root versions as well
+npm install --package-lock-only
 ```
 
 ## Mapping Heuristic
@@ -41,5 +46,7 @@ git diff --no-index ../npm-upstream/v0.6.0/package/dist/chat-bridge.js ../npm-up
 
 - `npm run typecheck` passes
 - `npm run build` passes
+- `package.json` version is bumped to the aligned upstream version
+- If lockfile exists, `package-lock.json` root version entries are in sync
 - README aligned version updated
 - Final summary includes intentional deviations (if any)
