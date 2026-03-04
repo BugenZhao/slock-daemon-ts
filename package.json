@@ -1,6 +1,6 @@
 {
   "name": "slock-daemon-ts-rewrite",
-  "version": "0.7.0",
+  "version": "0.7.0+bugen",
   "private": true,
   "type": "module",
   "description": "Well-structured TypeScript rewrite of @slock-ai/daemon",

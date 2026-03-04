@@ -64,6 +64,10 @@ export class CodexDriver implements RuntimeDriver {
         ];
 
     const args: string[] = ["exec"];
+    if (ctx.codexOss) {
+      args.push("--oss");
+      args.push("--local-provider", "lmstudio");
+    }
     if (ctx.config.sessionId) {
       args.push("resume", ctx.config.sessionId);
     }

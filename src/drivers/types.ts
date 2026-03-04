@@ -9,6 +9,7 @@ export interface DriverSpawnContext {
   workingDirectory: string;
   chatBridgePath: string;
   daemonApiKey: string;
+  codexOss: boolean;
   onAgentJsonIo?: (stream: "stdin" | "stdout" | "stderr", raw: string) => void;
 }
 

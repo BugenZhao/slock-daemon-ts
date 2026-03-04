@@ -19,6 +19,8 @@ interface CliOptions {
   apiKey: string;
   enableSleepWake: boolean;
   verbose: boolean;
+  codexOss: boolean;
+  overwriteModel?: string;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -27,6 +29,8 @@ function parseArgs(argv: string[]): CliOptions {
   let apiKey = "";
   let enableSleepWake = true;
   let verbose = false;
+  let codexOss = false;
+  let overwriteModel: string | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--server-url" && args[i + 1]) {
@@ -53,16 +57,32 @@ function parseArgs(argv: string[]): CliOptions {
 
     if (args[i] === "--verbose") {
       verbose = true;
+      continue;
+    }
+
+    if (args[i] === "--codex-oss") {
+      codexOss = true;
+      continue;
+    }
+
+    if (args[i] === "--overwrite-model") {
+      if (!args[i + 1]) {
+        throw new Error(
+          "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>]",
+        );
+      }
+      overwriteModel = args[i + 1];
+      i += 1;
     }
   }
 
   if (!serverUrl || !apiKey) {
     throw new Error(
-      "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose]",
+      "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>]",
     );
   }
 
-  return { serverUrl, apiKey, enableSleepWake, verbose };
+  return { serverUrl, apiKey, enableSleepWake, verbose, codexOss, overwriteModel };
 }
 
 function resolveChatBridgePath(): string {
@@ -79,7 +99,7 @@ function resolveChatBridgePath(): string {
 }
 
 async function main(): Promise<void> {
-  const { serverUrl, apiKey, enableSleepWake, verbose } = parseArgs(process.argv);
+  const { serverUrl, apiKey, enableSleepWake, verbose, codexOss, overwriteModel } = parseArgs(process.argv);
   const chatBridgePath = resolveChatBridgePath();
 
   let connection!: DaemonConnection;
@@ -89,6 +109,7 @@ async function main(): Promise<void> {
     (msg) => connection.send(msg),
     apiKey,
     verbose,
+    codexOss,
   );
 
   connection = new DaemonConnection({
@@ -102,7 +123,9 @@ async function main(): Promise<void> {
 
       switch (msg.type) {
         case "agent:start": {
-          const effectiveConfig = msg.config;
+          const effectiveConfig = overwriteModel
+            ? { ...msg.config, model: overwriteModel }
+            : msg.config;
           const effectiveWakeMessage = enableSleepWake ? msg.wakeMessage : undefined;
           const effectiveUnreadSummary = enableSleepWake
             ? msg.unreadSummary
@@ -250,6 +273,12 @@ async function main(): Promise<void> {
   );
   if (verbose) {
     console.log("[Slock Daemon] Verbose agent JSON I/O logging: enabled");
+  }
+  if (overwriteModel) {
+    console.log(`[Slock Daemon] Model override: ${overwriteModel}`);
+  }
+  if (codexOss) {
+    console.log("[Slock Daemon] Codex OSS mode: enabled (--oss)");
   }
   connection.connect();
 

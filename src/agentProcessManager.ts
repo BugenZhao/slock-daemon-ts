@@ -62,6 +62,7 @@ export class AgentProcessManager {
     private readonly sendToServer: (msg: OutgoingMessage) => void,
     private readonly daemonApiKey: string,
     private readonly verboseJsonIo = false,
+    private readonly codexOss = false,
   ) {}
 
   async startAgent(
@@ -117,6 +118,7 @@ ${config.description || "No role defined yet."}
         workingDirectory: agentDataDir,
         chatBridgePath: this.chatBridgePath,
         daemonApiKey: this.daemonApiKey,
+        codexOss: this.codexOss,
         onAgentJsonIo: (stream, raw) => {
           this.logAgentJsonIo(agentId, stream, raw);
         },

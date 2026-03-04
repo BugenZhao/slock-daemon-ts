@@ -14,6 +14,8 @@ This project is not a strict 1:1 rewrite: it keeps upstream-compatible behavior 
 
 - `--disable-sleep-wake`: disable sleep/wake orchestration while still preserving `sessionId` resume behavior.
 - `--verbose`: print full agent JSON I/O (`stdin` / `stdout` / `stderr`) for low-level debugging.
+- `--codex-oss`: when runtime is `codex`, append `--oss` to codex startup args.
+- `--overwrite-model <model>`: always use this model and ignore `model` provided in agent config.
 - TypeScript-first modular codebase for easier extension, testing, and periodic upstream sync.
 
 ## Project Structure
@@ -57,6 +59,18 @@ npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --disable-s
 
 With `--disable-sleep-wake`, daemon ignores `agent:sleep` and wake-message context,
 but still keeps/resumes `sessionId` when provided by upstream.
+
+Force all agents to use a specific model (overriding agent config):
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --overwrite-model claude-sonnet-4
+```
+
+Enable Codex OSS mode (adds `--oss` when spawning codex):
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --codex-oss
+```
 
 Build:
 
