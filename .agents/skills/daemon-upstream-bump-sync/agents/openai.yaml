@@ -1,0 +1,4 @@
+interface:
+  display_name: "Daemon Upstream Bump"
+  short_description: "Sync @slock-ai/daemon npm updates safely and fast"
+  default_prompt: "Use $daemon-upstream-bump-sync to align this repo with the latest @slock-ai/daemon npm release and summarize behavior deltas."
