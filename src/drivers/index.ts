@@ -7,6 +7,8 @@ const drivers: Record<string, RuntimeDriver> = {
   codex: new CodexDriver(),
 };
 
+export const DRIVER_IDS = Object.freeze(Object.keys(drivers));
+
 export function getDriver(runtimeId: string): RuntimeDriver {
   const driver = drivers[runtimeId];
   if (!driver) {

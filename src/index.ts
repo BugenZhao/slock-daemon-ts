@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 
 import { AgentProcessManager } from "./agentProcessManager.js";
 import { DaemonConnection } from "./connection.js";
+import { DRIVER_IDS } from "./drivers/index.js";
 import { detectRuntimes } from "./runtime-detection.js";
+import type { RuntimeId } from "./types.js";
 import type { IncomingMessage } from "./types.js";
 
 const require = createRequire(import.meta.url);
@@ -21,6 +23,30 @@ interface CliOptions {
   verbose: boolean;
   codexOss: boolean;
   overwriteModel?: string;
+  overwriteModelsByRuntime: Partial<Record<RuntimeId, string>>;
+}
+
+const USAGE =
+  "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>] [--overwrite-model-<runtime> <model>]";
+
+function requireArgValue(args: string[], index: number, flag: string): string {
+  const value = args[index + 1];
+  if (!value) {
+    throw new Error(`${USAGE}\nMissing value for ${flag}.`);
+  }
+  return value;
+}
+
+function resolveOverwriteModel(
+  runtime: string | undefined,
+  overwriteModel: string | undefined,
+  overwriteModelsByRuntime: Partial<Record<RuntimeId, string>>,
+): string | undefined {
+  if (runtime && runtime in overwriteModelsByRuntime) {
+    return overwriteModelsByRuntime[runtime as RuntimeId];
+  }
+
+  return overwriteModel;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -31,6 +57,7 @@ function parseArgs(argv: string[]): CliOptions {
   let verbose = false;
   let codexOss = false;
   let overwriteModel: string | undefined;
+  const overwriteModelsByRuntime: Partial<Record<RuntimeId, string>> = {};
 
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--server-url" && args[i + 1]) {
@@ -66,23 +93,35 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (args[i] === "--overwrite-model") {
-      if (!args[i + 1]) {
-        throw new Error(
-          "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>]",
-        );
-      }
-      overwriteModel = args[i + 1];
+      overwriteModel = requireArgValue(args, i, "--overwrite-model");
       i += 1;
+      continue;
+    }
+
+    if (args[i].startsWith("--overwrite-model-")) {
+      const suffix = args[i].slice("--overwrite-model-".length);
+      const runtime = DRIVER_IDS.includes(suffix) ? (suffix as RuntimeId) : undefined;
+      if (runtime) {
+        overwriteModelsByRuntime[runtime] = requireArgValue(args, i, args[i]);
+        i += 1;
+        continue;
+      }
     }
   }
 
   if (!serverUrl || !apiKey) {
-    throw new Error(
-      "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>]",
-    );
+    throw new Error(USAGE);
   }
 
-  return { serverUrl, apiKey, enableSleepWake, verbose, codexOss, overwriteModel };
+  return {
+    serverUrl,
+    apiKey,
+    enableSleepWake,
+    verbose,
+    codexOss,
+    overwriteModel,
+    overwriteModelsByRuntime,
+  };
 }
 
 function resolveChatBridgePath(): string {
@@ -99,7 +138,15 @@ function resolveChatBridgePath(): string {
 }
 
 async function main(): Promise<void> {
-  const { serverUrl, apiKey, enableSleepWake, verbose, codexOss, overwriteModel } = parseArgs(process.argv);
+  const {
+    serverUrl,
+    apiKey,
+    enableSleepWake,
+    verbose,
+    codexOss,
+    overwriteModel,
+    overwriteModelsByRuntime,
+  } = parseArgs(process.argv);
   const chatBridgePath = resolveChatBridgePath();
 
   let connection!: DaemonConnection;
@@ -123,8 +170,13 @@ async function main(): Promise<void> {
 
       switch (msg.type) {
         case "agent:start": {
-          const effectiveConfig = overwriteModel
-            ? { ...msg.config, model: overwriteModel }
+          const overwriteTargetModel = resolveOverwriteModel(
+            msg.config.runtime,
+            overwriteModel,
+            overwriteModelsByRuntime,
+          );
+          const effectiveConfig = overwriteTargetModel
+            ? { ...msg.config, model: overwriteTargetModel }
             : msg.config;
           const effectiveWakeMessage = enableSleepWake ? msg.wakeMessage : undefined;
           const effectiveUnreadSummary = enableSleepWake
@@ -275,7 +327,13 @@ async function main(): Promise<void> {
     console.log("[Slock Daemon] Verbose agent JSON I/O logging: enabled");
   }
   if (overwriteModel) {
-    console.log(`[Slock Daemon] Model override: ${overwriteModel}`);
+    console.log(`[Slock Daemon] Global model override: ${overwriteModel}`);
+  }
+  for (const runtime of DRIVER_IDS) {
+    const model = overwriteModelsByRuntime[runtime as RuntimeId];
+    if (model) {
+      console.log(`[Slock Daemon] ${runtime} model override: ${model}`);
+    }
   }
   if (codexOss) {
     console.log("[Slock Daemon] Codex OSS mode: enabled (--oss)");

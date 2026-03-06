@@ -16,6 +16,7 @@ This project is not a strict 1:1 rewrite: it keeps upstream-compatible behavior 
 - `--verbose`: print full agent JSON I/O (`stdin` / `stdout` / `stderr`) for low-level debugging.
 - `--codex-oss`: when runtime is `codex`, append `--oss` to codex startup args.
 - `--overwrite-model <model>`: always use this model and ignore `model` provided in agent config.
+- `--overwrite-model-<runtime> <model>`: override model only for a specific implemented runtime, currently `claude` and `codex`.
 - TypeScript-first modular codebase for easier extension, testing, and periodic upstream sync.
 
 ## Project Structure
@@ -66,6 +67,20 @@ Force all agents to use a specific model (overriding agent config):
 npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --overwrite-model claude-sonnet-4
 ```
 
+Override only Claude Code agents:
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --overwrite-model-claude claude-sonnet-4
+```
+
+Override only Codex agents:
+
+```bash
+npm run dev -- --server-url http://localhost:3001 --api-key YOUR_KEY --overwrite-model-codex gpt-5.4
+```
+
+When both global and runtime-specific overrides are set, the runtime-specific override wins for that runtime.
+
 Enable Codex OSS mode (adds `--oss` when spawning codex):
 
 ```bash
@@ -103,4 +118,5 @@ npm run dev:chat-bridge -- --agent-id AGENT_ID --server-url http://localhost:300
 
 - Persistent agent data is stored in `~/.slock/agents/<agentId>`.
 - `MEMORY.md` and `notes/` are initialized automatically per agent workspace.
-- Runtime support currently mirrors package behavior for `claude` and `codex`.
+- Implemented drivers currently include `claude` and `codex`.
+- `gemini` and `kimi` appear in runtime detection types, but do not yet have driver implementations in `src/drivers/`.
