@@ -2,6 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { z } from "zod";
 
 interface CliArgs {
@@ -10,33 +11,34 @@ interface CliArgs {
   authToken: string;
 }
 
-function parseArgs(argv: string[]): CliArgs {
-  const args = argv.slice(2);
-  let agentId = "";
-  let serverUrl = "http://localhost:3001";
-  let authToken = "";
+const USAGE =
+  "Usage: slock-chat-bridge --agent-id <id> [--server-url <url>] [--auth-token <token>]";
 
-  for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === "--agent-id" && args[i + 1]) {
-      agentId = args[i + 1];
-      i += 1;
-      continue;
-    }
-
-    if (args[i] === "--server-url" && args[i + 1]) {
-      serverUrl = args[i + 1];
-      i += 1;
-      continue;
-    }
-
-    if (args[i] === "--auth-token" && args[i + 1]) {
-      authToken = args[i + 1];
-      i += 1;
-    }
+function parseCliArgs(argv: string[]): CliArgs {
+  let values: ReturnType<typeof parseNodeArgs>["values"];
+  try {
+    ({ values } = parseNodeArgs({
+      args: argv.slice(2),
+      strict: true,
+      allowPositionals: false,
+      options: {
+        "agent-id": { type: "string" },
+        "server-url": { type: "string" },
+        "auth-token": { type: "string" },
+      },
+    }));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${USAGE}\n${detail}`);
   }
 
+  const agentId = typeof values["agent-id"] === "string" ? values["agent-id"] : "";
+  const serverUrl =
+    typeof values["server-url"] === "string" ? values["server-url"] : "http://localhost:3001";
+  const authToken = typeof values["auth-token"] === "string" ? values["auth-token"] : "";
+
   if (!agentId) {
-    throw new Error("Missing --agent-id");
+    throw new Error(`${USAGE}\nMissing required option: --agent-id`);
   }
 
   return { agentId, serverUrl, authToken };
@@ -62,7 +64,7 @@ function buildHeaders(authToken: string): HeadersInit {
 }
 
 async function main(): Promise<void> {
-  const { agentId, serverUrl, authToken } = parseArgs(process.argv);
+  const { agentId, serverUrl, authToken } = parseCliArgs(process.argv);
   const commonHeaders = buildHeaders(authToken);
 
   const server = new McpServer({

@@ -4,6 +4,7 @@ import { accessSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { AgentProcessManager } from "./agentProcessManager.js";
@@ -29,14 +30,6 @@ interface CliOptions {
 const USAGE =
   "Usage: slock-daemon --server-url <url> --api-key <key> [--disable-sleep-wake] [--verbose] [--codex-oss] [--overwrite-model <model>] [--overwrite-model-<runtime> <model>]";
 
-function requireArgValue(args: string[], index: number, flag: string): string {
-  const value = args[index + 1];
-  if (!value) {
-    throw new Error(`${USAGE}\nMissing value for ${flag}.`);
-  }
-  return value;
-}
-
 function resolveOverwriteModel(
   runtime: string | undefined,
   overwriteModel: string | undefined,
@@ -49,65 +42,48 @@ function resolveOverwriteModel(
   return overwriteModel;
 }
 
-function parseArgs(argv: string[]): CliOptions {
-  const args = argv.slice(2);
-  let serverUrl = "";
-  let apiKey = "";
-  let enableSleepWake = true;
-  let verbose = false;
-  let codexOss = false;
-  let overwriteModel: string | undefined;
+function parseCliArgs(argv: string[]): CliOptions {
+  const runtimeOverwriteOptions = Object.fromEntries(
+    DRIVER_IDS.map((runtime) => [(`overwrite-model-${runtime}`), { type: "string" as const }]),
+  );
+
+  let values: ReturnType<typeof parseNodeArgs>["values"];
+  try {
+    ({ values } = parseNodeArgs({
+      args: argv.slice(2),
+      strict: true,
+      allowPositionals: false,
+      options: {
+        "server-url": { type: "string" },
+        "api-key": { type: "string" },
+        "disable-sleep-wake": { type: "boolean" },
+        "enable-sleep-wake": { type: "boolean" },
+        verbose: { type: "boolean" },
+        "codex-oss": { type: "boolean" },
+        "overwrite-model": { type: "string" },
+        ...runtimeOverwriteOptions,
+      },
+    }));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${USAGE}\n${detail}`);
+  }
+
   const overwriteModelsByRuntime: Partial<Record<RuntimeId, string>> = {};
-
-  for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === "--server-url" && args[i + 1]) {
-      serverUrl = args[i + 1];
-      i += 1;
-      continue;
-    }
-
-    if (args[i] === "--api-key" && args[i + 1]) {
-      apiKey = args[i + 1];
-      i += 1;
-      continue;
-    }
-
-    if (args[i] === "--disable-sleep-wake") {
-      enableSleepWake = false;
-      continue;
-    }
-
-    if (args[i] === "--enable-sleep-wake") {
-      enableSleepWake = true;
-      continue;
-    }
-
-    if (args[i] === "--verbose") {
-      verbose = true;
-      continue;
-    }
-
-    if (args[i] === "--codex-oss") {
-      codexOss = true;
-      continue;
-    }
-
-    if (args[i] === "--overwrite-model") {
-      overwriteModel = requireArgValue(args, i, "--overwrite-model");
-      i += 1;
-      continue;
-    }
-
-    if (args[i].startsWith("--overwrite-model-")) {
-      const suffix = args[i].slice("--overwrite-model-".length);
-      const runtime = DRIVER_IDS.includes(suffix) ? (suffix as RuntimeId) : undefined;
-      if (runtime) {
-        overwriteModelsByRuntime[runtime] = requireArgValue(args, i, args[i]);
-        i += 1;
-        continue;
-      }
+  for (const runtime of DRIVER_IDS) {
+    const value = values[`overwrite-model-${runtime}`];
+    if (typeof value === "string") {
+      overwriteModelsByRuntime[runtime as RuntimeId] = value;
     }
   }
+
+  const serverUrl = typeof values["server-url"] === "string" ? values["server-url"] : "";
+  const apiKey = typeof values["api-key"] === "string" ? values["api-key"] : "";
+  const enableSleepWake = values["disable-sleep-wake"] ? false : values["enable-sleep-wake"] ? true : true;
+  const verbose = values.verbose === true;
+  const codexOss = values["codex-oss"] === true;
+  const overwriteModel =
+    typeof values["overwrite-model"] === "string" ? values["overwrite-model"] : undefined;
 
   if (!serverUrl || !apiKey) {
     throw new Error(USAGE);
@@ -146,7 +122,7 @@ async function main(): Promise<void> {
     codexOss,
     overwriteModel,
     overwriteModelsByRuntime,
-  } = parseArgs(process.argv);
+  } = parseCliArgs(process.argv);
   const chatBridgePath = resolveChatBridgePath();
 
   let connection!: DaemonConnection;
